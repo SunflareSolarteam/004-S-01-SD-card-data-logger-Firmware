@@ -11,12 +11,9 @@
 #include "mla_fileio/fileio.h"
 #include "mla_fileio/sd_spi.h"
 #include "debugprint.h"
-#include "softwaretimer.h"
 #include <string.h>
 #include "utl.h"
-#include "gps.h"
-#include "mcc_generated_files/pin_manager.h"
-#include "canbus.h"
+#include "device_logger_descriptors.h"
 
 // ********************************************************
 // * FILE IO AND SD CARD
@@ -58,41 +55,84 @@ const FILEIO_DRIVE_CONFIG gSdDrive =
     (FILEIO_DRIVER_WriteProtectStateGet)FILEIO_SD_WriteProtectStateGet,     // Function to determine if the media is write-protected.
 };
 
+#define SD_PIN_ANSEL_CS     ANSELBbits.ANSB0
+#define SD_PIN_ANSEL_MISO   ANSELAbits.ANSA0
+#define SD_PIN_ANSEL_MOSI   ANSELAbits.ANSA2
+#define SD_PIN_ANSEL_CLK    ANSELAbits.ANSA1
+//#define SD_PIN_ANSEL_DETECT 
+
+#define SD_PIN_TRIS_CS      TRISBbits.TRISB0
+#define SD_PIN_TRIS_MISO    TRISAbits.TRISA0
+#define SD_PIN_TRIS_MOSI    TRISAbits.TRISA2
+#define SD_PIN_TRIS_CLK     TRISAbits.TRISA1
+#define SD_PIN_TRIS_DETECT  TRISAbits.TRISA3
+
+#define SD_PIN_LAT_CS       LATBbits.LATB0
+
+#define SD_PIN_PORT_DETECT  PORTAbits.RA3
+
+#define SD_PIN_RP_SDI       16
+#define SD_PIN_RP_SDO       _RP18R
+#define SD_PIN_RP_SCK       _RP17R
+
 
 void sd_logger_SdSpiConfigurePins (void)
 {
-    //pin init done in mcc
+#ifdef SD_PIN_ANSEL_CS
+    SD_PIN_ANSEL_CS = 0;
+#endif
+#ifdef SD_PIN_ANSEL_MISO
+    SD_PIN_ANSEL_MISO = 0;
+#endif
+#ifdef SD_PIN_ANSEL_MOSI
+    SD_PIN_ANSEL_MOSI = 0;
+#endif
+#ifdef SD_PIN_ANSEL_CLK
+    SD_PIN_ANSEL_CLK = 0;
+#endif
+#ifdef SD_PIN_ANSEL_DETECT
+    SD_PIN_ANSEL_DETECT = 0;
+#endif
+    
+    SD_PIN_TRIS_CS = 0;
+    SD_PIN_TRIS_MISO = 1;
+    SD_PIN_TRIS_MOSI = 0;
+    SD_PIN_TRIS_CLK = 0;
+    SD_PIN_TRIS_DETECT = 1;
+    
+    SD_PIN_LAT_CS = 0;
+    
+    // PPS unlock
+    __builtin_write_OSCCONL(OSCCON & ~(1<<6));
+    // PPS
+    _SDI1R = SD_PIN_RP_SDI;            // RP52 -> SPI1 SDI
+    SD_PIN_RP_SDO = _RPOUT_SDO1;   // RP54 -> SPI1 SDO
+    SD_PIN_RP_SCK = _RPOUT_SCK1;   // RP53 -> SPI1 SCK
+    // PPS lock
+    __builtin_write_OSCCONL(OSCCON | (1<<6));
 }
 
 inline void sd_logger_SdSpiSetCs(uint8_t a)
 {
     if (a) {
-        IO_SD_CS_SetHigh();
+        SD_PIN_LAT_CS = 1;
     } else {
-        IO_SD_CS_SetLow();
+        SD_PIN_LAT_CS = 0;
     }
 }
 
 inline bool sd_logger_SdSpiGetCd(void)
 {
-    //return (!PORTCbits.RC2) ? true : false;
-    if (!IO_SD_DETECT_GetValue()) {
+    if (!SD_PIN_PORT_DETECT) {
         return true;
     } else {
         return false;
     }
-    //return true;
 }
 
 inline bool sd_logger_SdSpiGetWp(void)
 {
-    //return (PORTGbits.RG1) ? true : false;
-    if (IO_SD_PROTECT_GetValue()) {
-        return true;
-    } else {
-        return false;
-    }
-    //return false;
+    return false;
 }
 
 void GetTimestamp (FILEIO_TIMESTAMP * timeStamp)
@@ -149,21 +189,20 @@ static int8_t sd_logger_fileio_init(void) {
 // * LOGGING
 // ********************************************************
 
-static uint8_t timer_sd_logger = SOFTWARETIMER_NONE;
-static uint8_t sd_logger_file_number = 0;
-static uint8_t sd_logger_file_new = 0;
+static uint32_t sd_logger_file_number = 0;
+static uint16_t sd_logger_file_bufs_written = 0;
 
 
 static void sd_logger_find_free_file_number(void) {
-    uint8_t i;
+    uint32_t i;
     char file_name[13];
     char temp[8];
     FILEIO_OBJECT file;
     
     // find next free number in filename
-    for (i=0; i<254; i++) {
+    for (i=0; i<99999; i++) {
         strcpy(file_name, "LOG");
-        utl_uint32_to_string(i, temp, 10);
+        utl_uint32_to_string_len(i, temp, 10, 5);
         strcat(file_name, temp);
         strcat(file_name, ".CSV");
         // Try to open file
@@ -185,13 +224,12 @@ static void sd_logger_write_to_file(char *buffer, uint16_t buffer_length) {
     
     // Write to file
     strcpy(file_name, "LOG");
-    utl_uint32_to_string(sd_logger_file_number, temp_string, 10);
+    utl_uint32_to_string_len(sd_logger_file_number, temp_string, 10, 5);
     strcat(file_name, temp_string);
     strcat(file_name, ".CSV");
     
     if (FILEIO_Open(&file, file_name, FILEIO_OPEN_WRITE | FILEIO_OPEN_APPEND | FILEIO_OPEN_CREATE) != FILEIO_RESULT_SUCCESS) {
         write_errors++;
-        IO_LED_R_SetLow();
         if (write_errors > 16) {
             asm("reset");
         }
@@ -212,9 +250,6 @@ int8_t sd_logger_init(void) {
     // Successfully init filesystem
     else {
         sd_logger_find_free_file_number();
-        timer_sd_logger = softwaretimer_create(SOFTWARETIMER_CONTINUOUS_MODE);
-        sd_logger_file_new = 1;
-        softwaretimer_start(timer_sd_logger, 1000);
         
         debugprint_string("Using logfile ");
         debugprint_uint(sd_logger_file_number);
@@ -224,409 +259,123 @@ int8_t sd_logger_init(void) {
     }
 }
 
-void sd_logger_process(void) {
-    //static uint8_t counter;
-    char log_string[512] = "";
+void sd_logger_store_logging_buffer(logging_buffer_t *buf) {
+    char log_string[256] = "";
     char temp_string[16] = "";
-    static uint16_t times_written_counter = 0;
-    uint8_t i;
+    uint16_t device_index, entry_index, data_index;
     
-    gps_time_t gps_time;
-    gps_coordinates_t gps_coordinates;
-    gps_speed_t gps_speed;
-    mg_battery_t mg_battery;
-    mg_mppt_t mg_mppt;
-    sunflare_mppt_t sunflare_mppt;
-    sls_t sls;
-    foil_control_t foil_control;
-    
-    if (softwaretimer_get_expired(timer_sd_logger) == 1) {
-        // Create new file when written for one hour
-        times_written_counter++;
-        if (times_written_counter == 3601) {
-            sd_logger_find_free_file_number();
-            sd_logger_file_new = 1;
-            
-            debugprint_string("Using logfile ");
-            debugprint_uint(sd_logger_file_number);
-            debugprint_string("\r\n");
-            
-            times_written_counter = 1;
-        }
-        
-        if (sd_logger_file_new == 1) {
-            // Logger
-            strcat(log_string, "Log counter;");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            // GPS
-            strcat(log_string, "Day;Month;Year;Hour;Min;Sec;Latitude deg;Latitude min;Longitude deg;Longitude min;Direction;Speed;");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            // Batt
-            strcat(log_string, "Batt voltage;Batt current; Batt discharge current;Batt charge current;Batt soc;Batt time to go;Batt bms state;");
-            for (i = 0; i < 4; i++) {
-                strcat(log_string, "Batt temp ");
-                utl_uint32_to_string(i, temp_string, 10);
-                strcat(log_string, temp_string);
+    // If this is first line of this file, write units
+    if (sd_logger_file_bufs_written == 0) {
+        strcpy(log_string, ";");
+        // Device names
+        for (device_index = 0; device_index < DEVICE_LIST_COUNT; device_index++) {
+            strcat(log_string, device_list[device_index].name);
+            for (entry_index = 0; entry_index < device_list[device_index].msg_count; entry_index++) {
                 strcat(log_string, ";");
+                // Names are max 16 chars long + ; char + null char
+                if (strlen(log_string) >= (256 - 18)) {
+                    sd_logger_write_to_file(log_string, strlen(log_string));
+                    strcpy(log_string, "");
+                }
             }
-            for (i = 0; i < 12; i++) {
-                strcat(log_string, "Batt cell ");
-                utl_uint32_to_string(i+1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " voltage;");
+        }
+        strcat(log_string, "\r\nTimeSinceBoot;");
+        // Names are max 16 chars long + ; char + null char
+        if (strlen(log_string) >= (256 - 18)) {
+            sd_logger_write_to_file(log_string, strlen(log_string));
+            strcpy(log_string, "");
+        }
+        // Data names
+        for (device_index = 0; device_index < DEVICE_LIST_COUNT; device_index++) {
+            for (entry_index = 0; entry_index < device_list[device_index].msg_count; entry_index++) {
+                strcat(log_string, (device_list[device_index].msg_descr + entry_index)->name);
+                strcat(log_string, ";");
+                // Names are max 16 chars long + ; char + null char
+                if (strlen(log_string) >= (256 - 18)) {
+                    sd_logger_write_to_file(log_string, strlen(log_string));
+                    strcpy(log_string, "");
+                }
             }
-            strcat(log_string, "Power level;");
+        }
+        strcat(log_string, "\r\nms;");
+        // Names are max 16 chars long + ; char + null char
+        if (strlen(log_string) >= (256 - 18)) {
             sd_logger_write_to_file(log_string, strlen(log_string));
             strcpy(log_string, "");
-            // MPPT
-            for (i = 0; i < NODE_ID_MG_MPPT_TOTAL; i++) {
-                strcat(log_string, "MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " A in;");
-                strcat(log_string, "MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " V in;");
-                strcat(log_string, "MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " V out;");
-                strcat(log_string, "MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " P in;");
-                sd_logger_write_to_file(log_string, strlen(log_string));
-                strcpy(log_string, "");
+        }
+        // Units
+        for (device_index = 0; device_index < DEVICE_LIST_COUNT; device_index++) {
+            for (entry_index = 0; entry_index < device_list[device_index].msg_count; entry_index++) {
+                strcat(log_string, (device_list[device_index].msg_descr + entry_index)->unit);
+                strcat(log_string, ";");
+                // Names are max 16 chars long + ; char + null char
+                if (strlen(log_string) >= (256 - 18)) {
+                    sd_logger_write_to_file(log_string, strlen(log_string));
+                    strcpy(log_string, "");
+                }
             }
-            
-            // Sunflare MPPT
-            for (i = 0; i < NODE_ID_SUNFLARE_MPPT_TOTAL; i++) {
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " status;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " solder jumper;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " solar input voltage;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " solar input current;");
-                sd_logger_write_to_file(log_string, strlen(log_string));
-                strcpy(log_string, "");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " current channel 1;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " current channel 2;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " solar input power;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " batt output voltage;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " boost pd error;");
-                sd_logger_write_to_file(log_string, strlen(log_string));
-                strcpy(log_string, "");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " boost pd derivitive;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " boost pd power change;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " boost req output power;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " boost req solar solar input current;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " delta solar power;");
-                sd_logger_write_to_file(log_string, strlen(log_string));
-                strcpy(log_string, "");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " delta solar input corrent;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " step change;");
-                strcat(log_string, "Sunflare MPPT ");
-                utl_uint32_to_string(i + 1, temp_string, 10);
-                strcat(log_string, temp_string);
-                strcat(log_string, " req solar input current;");
-                sd_logger_write_to_file(log_string, strlen(log_string));
-                strcpy(log_string, "");
-            }
-            
-            // sls
-            strcat(log_string, "SLS status;SLS limiting;SLS temp power;SLS temp elec;SLS temp motor 1;SLS temp motor 2;SLS UZK;SLS motor current;SLS input current;RPM;");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            
-            // Foil control
-            strcat(log_string, "Foil input 1 pos;Foil output 1 pos;");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            
-            // End of line
-            strcat(log_string, "\r\n");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            
-            sd_logger_file_new = 0;
         }
-
-        // Create log data
-        // Logger info
-        utl_uint32_to_string(times_written_counter, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        sd_logger_write_to_file(log_string, strlen(log_string));
-        strcpy(log_string, "");
-        
-        // GPS
-        gps_time = get_gps_time();
-        gps_coordinates = get_gps_coordinates();
-        gps_speed = get_gps_speed();
-        // Time and date
-        utl_uint32_to_string(gps_time.day, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_time.month, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_time.year, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_time.hour, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_time.min, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_time.sec, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        // GPS location
-        utl_int32_to_string(gps_coordinates.latitude_degrees, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_coordinates.latitude_minutes, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(gps_coordinates.longitude_degrees, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_coordinates.longitude_minutes, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        // GPS additional data: direction, speed, height, satellites
-        utl_uint32_to_string(gps_speed.direction_degrees, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(gps_speed.speed_kmh, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        sd_logger_write_to_file(log_string, strlen(log_string));
-        strcpy(log_string, "");
-        
-        // MG battery
-        mg_battery = get_can_data_mg_battery();
-        utl_uint32_to_string(mg_battery.voltage_mv, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(mg_battery.current_10ma, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(mg_battery.discharge_current_10ma, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(mg_battery.charge_current_10ma, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(mg_battery.soc, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(mg_battery.time_to_go_min, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(mg_battery.bms_state, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        for (i = 0; i < 4; i++) {
-            utl_uint32_to_string(mg_battery.temp[i], temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-        }
-        for (i = 0; i < 12; i++) {
-            utl_uint32_to_string(mg_battery.cell_voltage_mv[i], temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-        }
-        utl_uint32_to_string(mg_battery.power_level, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        sd_logger_write_to_file(log_string, strlen(log_string));
-        strcpy(log_string, "");
-        
-        // MG mppt
-        for (i = 0; i < NODE_ID_MG_MPPT_TOTAL; i++) {
-            mg_mppt = get_can_data_mg_mppt(i);
-            utl_int32_to_string(mg_mppt.current_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_uint32_to_string(mg_mppt.voltage_in_mv, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_uint32_to_string(mg_mppt.voltage_out_mv, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(mg_mppt.power_in_100mw, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-        }
-        
-        // sunflare mppt :D
-        for (i = 0; i < NODE_ID_SUNFLARE_MPPT_TOTAL; i++) {
-            sunflare_mppt = get_can_data_sunflare_mppt(i);
-            utl_int32_to_string(sunflare_mppt.mppt_status, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.solder_jumper_status, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.solar_input_voltage_in_mv, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.solar_input_current_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            utl_int32_to_string(sunflare_mppt.current_channel_1_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.current_channel_2_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.solar_inpunt_power_in_mw, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.batt_output_voltage_in_mv, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            utl_int32_to_string(sunflare_mppt.boost_pd_error_in_mv, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.boost_pd_derivitive_in_mv_dt, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.boost_power_change_in_mw, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.boost_req_output_power_in_mw, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-            utl_int32_to_string(sunflare_mppt.boost_req_solar_input_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.mppt_delta_solar_power_in_mw, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.mppt_delta_solar_input_current_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.mppt_step_change_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            utl_int32_to_string(sunflare_mppt.mppt_req_solar_input_current_in_ma, temp_string, 10);
-            strcat(log_string, temp_string);
-            strcat(log_string, ";");
-            sd_logger_write_to_file(log_string, strlen(log_string));
-            strcpy(log_string, "");
-        }
-        
-        // SLS
-        sls = get_can_data_sls();
-        utl_uint32_to_string(sls.status, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(sls.limiting, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(sls.temp_power_100mdeg, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(sls.temp_electronics_100mdeg, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(sls.temp_motor_1_100mdeg, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(sls.temp_motor_2_100mdeg, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(sls.uzk_10mv, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(sls.motor_current_100ma, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(sls.input_currect_100ma, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_int32_to_string(sls.rpm, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        sd_logger_write_to_file(log_string, strlen(log_string));
-        strcpy(log_string, "");
-        
-        // Foil control
-        foil_control = get_can_data_foil_control();
-        utl_uint32_to_string(foil_control.primary_input_position, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        utl_uint32_to_string(foil_control.primary_output_position, temp_string, 10);
-        strcat(log_string, temp_string);
-        strcat(log_string, ";");
-        sd_logger_write_to_file(log_string, strlen(log_string));
-        strcpy(log_string, "");
-        
-        // New line
         strcat(log_string, "\r\n");
         sd_logger_write_to_file(log_string, strlen(log_string));
-        strcpy(log_string, "");
-        
-        debugprint_string("Written to SD card\r\n");
+    }
+    
+    // Write buffer
+    strcpy(log_string, "");
+    // Time since boot
+    utl_uint32_to_string(buf->time_since_boot_ms, temp_string, 10);
+    strcat(log_string, temp_string);
+    strcat(log_string, ";");
+    // Data
+    data_index = 0;
+    for (device_index = 0; device_index < DEVICE_LIST_COUNT; device_index++) {
+        for (entry_index = 0; entry_index < device_list[device_index].msg_count; entry_index++) {
+            switch ((device_list[device_index].msg_descr + entry_index)->type) {
+                case UINT32:
+                    utl_uint32_to_string(buf->data[data_index].uint32, temp_string, 10);
+                    break;
+                case INT32:
+                    utl_int32_to_string(buf->data[data_index].int32, temp_string, 10);
+                    break;
+                case UINT16:
+                    utl_uint32_to_string(buf->data[data_index].uint16, temp_string, 10);
+                    break;
+                case INT16:
+                    utl_int32_to_string(buf->data[data_index].int16, temp_string, 10);
+                    break;
+                case UINT8:
+                    utl_uint32_to_string(buf->data[data_index].uint8, temp_string, 10);
+                    break;
+                case INT8:
+                    utl_int32_to_string(buf->data[data_index].int8, temp_string, 10);
+                    break;
+                case HEX32:
+                    utl_uint32_to_string(buf->data[data_index].hex32, temp_string, 16);
+                    break;
+                case HEX16:
+                    utl_uint32_to_string(buf->data[data_index].hex16, temp_string, 16);
+                    break;
+                case HEX8:
+                    utl_uint32_to_string(buf->data[data_index].hex8, temp_string, 16);
+                    break;
+            }
+            data_index++;
+            strcat(log_string, temp_string);
+            strcat(log_string, ";");
+            // Data are max 10 chars long + ; char + null char
+            if (strlen(log_string) >= (256 - 18)) {
+                sd_logger_write_to_file(log_string, strlen(log_string));
+                strcpy(log_string, "");
+            }
+        }
+    }
+    strcat(log_string, "\r\n");
+    sd_logger_write_to_file(log_string, strlen(log_string));
+    
+    // Increment buffers written to this file counter
+    sd_logger_file_bufs_written++;
+    // When 100 buffers written, start new file
+    if (sd_logger_file_bufs_written >= 252) {
+        sd_logger_file_bufs_written = 0;
+        sd_logger_file_number++;
     }
 }

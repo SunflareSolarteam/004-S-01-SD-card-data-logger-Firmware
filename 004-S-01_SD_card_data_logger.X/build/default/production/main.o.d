@@ -1,11 +1,13 @@
 build/default/production/main.o:  \
 main.c  \
-mcc_generated_files/system.h  \
- mcc_generated_files/system_types.h  \
-mcc_generated_files/pin_manager.h  \
- mcc_generated_files/watchdog.h  \
+config.h  \
 softwaretimer.h  \
-debugprint.h  \
-canbus.h  \
- sd_logger.h  \
+ debugprint.h  \
+can.h  \
+candrv.h  \
+device_logger.h  \
+device_logger_descriptors.h  \
+ device_logger_typedefs.h  \
+flash.h  \
+sd_logger.h  \
 gps.h 

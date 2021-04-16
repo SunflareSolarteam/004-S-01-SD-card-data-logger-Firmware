@@ -4,9 +4,7 @@
     <configuration>
         <data xmlns="http://www.netbeans.org/ns/make-project/1">
             <name>004-S-01_SD_card_data_logger</name>
-            <name>004-S-01-02</name>
-            <name>004-S-01-01</name>
-            <creation-uuid>da9114b9-6ede-4d7a-aaba-be9104ecd360</creation-uuid>
+            <creation-uuid>8a8629ee-bc68-420a-ba7b-c855f67b1707</creation-uuid>
             <make-project-type>0</make-project-type>
             <c-extensions>c</c-extensions>
             <cpp-extensions/>

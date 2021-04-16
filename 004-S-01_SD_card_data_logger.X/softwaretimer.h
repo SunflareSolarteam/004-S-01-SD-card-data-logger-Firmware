@@ -1,10 +1,29 @@
-/* 
- * File:                softwaretimer.h
- * Author:              Hylke
- * Comments:            Uses timer 1 to create programmable software timers
+/* THIS SOFTWARE IS SUPPLIED BY SUNFLARE SOLAR TEAM "AS IS".  NO WARRANTIES, WHETHER 
+ * EXPRESS, IMPLIED OR STATUTORY, APPLY TO THIS SOFTWARE, INCLUDING ANY IMPLIED 
+ * WARRANTIES OF NON-INFRINGEMENT, MERCHANTABILITY, AND FITNESS FOR A 
+ * PARTICULAR PURPOSE, OR ITS INTERACTION WITH SUNFLARE PRODUCTS, COMBINATION 
+ * WITH ANY OTHER PRODUCTS, OR USE IN ANY APPLICATION. 
+ *
+ * IN NO EVENT WILL SUNFLARE SOLAR TEAM BE LIABLE FOR ANY INDIRECT, SPECIAL, PUNITIVE, 
+ * INCIDENTAL OR CONSEQUENTIAL LOSS, DAMAGE, COST OR EXPENSE OF ANY KIND 
+ * WHATSOEVER RELATED TO THE SOFTWARE, HOWEVER CAUSED, EVEN IF SUNFLARE SOLAR TEAM HAS 
+ * BEEN ADVISED OF THE POSSIBILITY OR THE DAMAGES ARE FORESEEABLE.  TO THE 
+ * FULLEST EXTENT ALLOWED BY LAW, SUNFLARE SOLAR TEAM'S TOTAL LIABILITY ON ALL CLAIMS 
+ * IN ANY WAY RELATED TO THIS SOFTWARE WILL NOT EXCEED THE AMOUNT OF FEES, IF 
+ * ANY, THAT YOU HAVE PAID DIRECTLY TO SUNFLARE SOLAR TEAM FOR THIS SOFTWARE.
+ *
+ * SUNFLARE SOLAR TEAM PROVIDES THIS SOFTWARE CONDITIONALLY UPON YOUR ACCEPTANCE OF THESE 
+ * TERMS. 
  */
 
-// This is a guard condition so that contents of this file are not included more than once.  
+/* 
+ * File:        softwaretimer.h
+ * Author:      H. Veenstra
+ * Comments:    software implementation of multiple timers
+ */
+
+// This is a guard condition so that contents of this file are not included
+// more than once.  
 #ifndef SOFTWARETIMER_H
 #define	SOFTWARETIMER_H
 
@@ -59,6 +78,4 @@ int8_t softwaretimer_stop(uint8_t timer_number);
 //  -1 if the timer number was not a running timer or out of range.
 int8_t softwaretimer_get_expired(uint8_t timer_number);
 
-
 #endif	/* SOFTWARETIMER_H */
-

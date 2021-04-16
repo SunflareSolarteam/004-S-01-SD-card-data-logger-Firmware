@@ -6,104 +6,153 @@
  */
 
 #include <stdint.h>
-#include "mcc_generated_files/system.h"
-#include "mcc_generated_files/pin_manager.h"
-#include "mcc_generated_files/watchdog.h"
-
+#include "config.h"
 #include "softwaretimer.h"
 #include "debugprint.h"
-#include "canbus.h"
+#include "can.h"
+#include "device_logger.h"
+#include "device_logger_descriptors.h"
+#include "flash.h"
 #include "sd_logger.h"
 #include "gps.h"
 
+#define LED_PIN_TRIS_RED    TRISBbits.TRISB12
+#define LED_PIN_TRIS_GREEN  TRISBbits.TRISB13
+#define LED_PIN_LAT_RED     LATBbits.LATB12
+#define LED_PIN_LAT_GREEN   LATBbits.LATB13
+
+
 // Main application
 int main(void) {
-    int8_t one_sec_timer, led_timer, switch_counter = 0;
+    int8_t one_sec_timer = SOFTWARETIMER_NONE, log_timer = SOFTWARETIMER_NONE;
     uint32_t time_since_boot_sec = 0;
+    uint16_t i;
+    enum {
+        DATA_GATHERING,
+        DATA_SAVING
+    } logging_mode = DATA_GATHERING;
+    can_msg_t rx_msg;
+    logging_buffer_t logging_buffer;
+    gps_time_t time;
     
-    // initialize the device
-    SYSTEM_Initialize();
+    LED_PIN_TRIS_RED = 0;
+    LED_PIN_TRIS_GREEN = 0;
+    LED_PIN_LAT_RED = 1;
+    LED_PIN_LAT_GREEN = 0;
     
-    // Set leds
-    IO_LED_R_SetLow();
-    IO_LED_G_SetHigh();
+    // Init clock
+    // Set Fosc to 120Mhz
+    // Configure PLL prescaler, PLL postscaler, PLL divisor
+    CLKDIVbits.PLLPRE = 0;  // Input divided by 2
+    CLKDIVbits.PLLPOST = 0; // Output divided by 2
+    PLLFBDbits.PLLDIV = 28; // Feedback division by 30
+    
+    // Initiate Clock Switch to Primary Oscillator with PLL (NOSC=0b011)
+    __builtin_write_OSCCONH(0x03);
+    __builtin_write_OSCCONL(OSCCON | 0x01);
+    
+    // Wait for Clock switch to occur
+    while (OSCCONbits.COSC!= 0b011);
+    // Wait for PLL to lock
+    while (OSCCONbits.LOCK!= 1);
+    
+    // Init software
+    debugprint_init();
+    softwaretimer_init();
+    can_init();
+    flash_init();
+    device_logger_init();
+    sd_logger_init();
+    gps_init();
+    
+    // Create timers
+    one_sec_timer = softwaretimer_create(SOFTWARETIMER_CONTINUOUS_MODE);
+    softwaretimer_start(one_sec_timer, 1000);
+    // Start logging timer
+    log_timer = softwaretimer_create(SOFTWARETIMER_CONTINUOUS_MODE);
+    softwaretimer_start(log_timer, DATA_LOGGING_RATE_MS);
     
     debugprint_string("Hello universe!\r\nBecause greeting the world is thinking too small...\r\n");
     
-    // Init software
-    // Create timers
-    softwaretimer_init();
-    one_sec_timer = softwaretimer_create(SOFTWARETIMER_CONTINUOUS_MODE);
-    softwaretimer_start(one_sec_timer, 1000);
-    led_timer = softwaretimer_create(SOFTWARETIMER_SINGLE_MODE);
-    // CAN bus
-    can_bus_init();
-    // SD card
     while (1) {
-        // Try each second to init the sd card.
-        // If succeeded continue.
-        // After 128 seconds the watchdog timer expires and the uc is reset
-        if (softwaretimer_get_expired(one_sec_timer)) {
-            if (sd_logger_init() == 0) {
-                // no errors
-                break;
-            }
-            IO_LED_R_Toggle();
-        }
-    }
-    
-    IO_LED_R_SetLow();
-    IO_LED_G_SetLow();
-    
-    while (1) {
-        // Kick the dog
-        WATCHDOG_TimerClear();
         
-        // Receive all the data and then log it.
-        can_bus_process();
-        gps_handler();
-        sd_logger_process();
+        switch (logging_mode) {
+            case DATA_GATHERING:
+                gps_handler();
+                // Transmit CAN bus messages
+                can_transmit_process();
+                
+                // Check if a can bus message has been received
+                if (can_receive_message(&rx_msg)) {
+                    // Decode and collect data in local ram
+                    device_logger_decode_and_collect_can_message(rx_msg);
+                }
+                
+                // Check if data is ready to be stored
+                if (softwaretimer_get_expired(log_timer)) {
+                    LED_PIN_LAT_GREEN = !LED_PIN_LAT_GREEN;
+                    device_logger_increase_time_since_boot(DATA_LOGGING_RATE_MS);
+                    get_device_logger_collected_data(&logging_buffer);
+                    device_logger_clear_data();
+                    
+                    // Store to flash
+                    flash_store_logging_data(&logging_buffer);
+                }
+                
+                // Check if we need to store to sd
+                if (flash_get_flash_full()) {
+                    logging_mode = DATA_SAVING;
+                }
+                break;
+                
+            case DATA_SAVING:
+                // Save data
+                LED_PIN_LAT_RED = 1;
+                LED_PIN_LAT_GREEN = 0;
+                for (i = 0; i < flash_get_flash_number_of_data(); i++) {
+                    flash_get_flash_logging_data(&logging_buffer, i);
+                    sd_logger_store_logging_buffer(&logging_buffer);
+                    // Kick the dog
+                    ClrWdt();
+                }
+                flash_clear_data();
+                logging_mode = DATA_GATHERING;
+                LED_PIN_LAT_RED = 0;
+                break;
+                
+            default:
+                logging_mode = DATA_GATHERING;
+                break;
+        }
         
         // Triggers every 1 sec
         if (softwaretimer_get_expired(one_sec_timer) == 1) {
-            softwaretimer_start(led_timer, 50);
-            IO_LED_G_SetHigh();
-            
             time_since_boot_sec++;
             debugprint_string("Time since bootup: ");
             debugprint_uint(time_since_boot_sec);
             debugprint_string("sec\r\n");
             
-            if(!IO_SWITCH_GetValue()) {
-                switch_counter++;
-            } else {
-                switch_counter = 0;
-            }
+            time = get_gps_time();
+            debugprint_string("Time: ");
+            debugprint_uint(time.hour);
+            debugprint_string(":");
+            debugprint_uint(time.min);
+            debugprint_string(":");
+            debugprint_uint(time.sec);
+            debugprint_string("\r\n");
         }
         
-        // Triggers 50ms after each 1 second trigger. Used to turn the led off
-        if (softwaretimer_get_expired(led_timer) == 1) {
-            IO_LED_G_SetLow();
-        }
+        // Kick the dog
+        ClrWdt();
         
-        // If the switch was held down for 3 sec we go into infinite while loop doing nothing.
-        // This enables the user to safely remove the sd card without corrupting it.
-        if (switch_counter >= 3) {
-            IO_LED_G_SetHigh();
-            while(1);
-        }
-        
-        // If the under voltage is triggered we wait until either the us is shut down or the voltage goes back up.
-        // No data is written to the sd card to prevent corruption.
-        if (!IO_UVP_GetValue()) {
-            IO_LED_R_SetHigh();
-            debugprint_string("UVP ERROR! Going to sleep.\r\n");
-            while (!IO_UVP_GetValue()) {
-                WATCHDOG_TimerClear();
-            }
-            IO_LED_R_SetLow();
-        }
-        
+        // Modes:
+        // 1 normal
+        //      Receive messages and store in ram
+        //      Store in flash every x ms
+        // 2 saving
+        //      Get messages from flash
+        //      Store on sd card
+        //      Clear all data
     }
     return 1; 
 }

@@ -2,14 +2,12 @@
  * File:   softwaretimer.c
  * Author: Hylke
  *
- * Created on February 9, 2019, 2:16 PM
+ * Created on March 1, 2020, 1:59 PM
  */
 
 #include <xc.h>
 #include <stdint.h>
 #include "softwaretimer.h"
-#include "mcc_generated_files/tmr1.h"
-
 
 // Timer resources
 static volatile struct{
@@ -21,9 +19,8 @@ static volatile struct{
     uint8_t expired : 1;
 } softwaretimers[SOFTWARETIMER_MAX_TIMERS] = {};
 
-
 // Timer 1 interrupt. Triggers every 1 ms
-void softwaretimer_interrupt_callback(void) {
+void __attribute__ ( ( interrupt, no_auto_psv ) ) _T3Interrupt(void) {
     uint8_t timer_number;
     
     // Check all timers
@@ -47,12 +44,32 @@ void softwaretimer_interrupt_callback(void) {
             }
         }
     }
+    
+    // Reset flag
+    _T3IF = 0;
 }
 
 // Initializes the programmable software timers
 void softwaretimer_init(void) {
-    // Timer 1 is already initialized in the system code
-    TMR1_SetInterruptHandler(&softwaretimer_interrupt_callback);
+    // Init timer 3
+    T3CONbits.TON = 0;
+    //TMR3 0; 
+    TMR3 = 0x00;
+    //Period = 0.001 s; Frequency = 60000000 Hz; PR1 7500; 
+    PR3 = 7500;
+    //TCKPS 1:8; TON enabled; TSIDL disabled; TCS FOSC/2; TSYNC disabled; TGATE disabled; 
+    T3CONbits.TCS = 0;      // Source is FP
+    T3CONbits.TCKPS = 0b01; // Pre-scaler 1:8
+    T3CONbits.TGATE = 0;
+    T3CONbits.TSIDL = 0;
+
+    // Enable interrupt
+    _T3IF = 0;
+    _T3IP = 4; // Medium priority
+    _T3IE = 1;
+    
+    // Start timer
+    T3CONbits.TON = 1;
 }
 
 // Creates a new timer

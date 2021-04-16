@@ -57,6 +57,8 @@ typedef struct {
 } gps_speed_t;
 
 // Functions
+void gps_init(void);
+
 void gps_handler(void);
 
 // Variable get
@@ -65,7 +67,14 @@ gps_coordinates_t get_gps_coordinates(void);
 gps_speed_t get_gps_speed(void);
 uint8_t get_gps_satellites(void);
 uint8_t get_gps_tick(void);
-
+uint32_t get_gps_time_stamp(void);
+uint32_t get_gps_lat_deg(void);
+uint32_t get_gps_lat_10u_min(void);
+uint32_t get_gps_long_deg(void);
+uint32_t get_gps_long_10u_min(void);
+uint16_t get_gps_speed_10mtrph(void);
+uint16_t get_gps_direction_100mdeg(void);
+uint16_t get_gps_number_of_satellites(void);
 
 #endif	/* GPS_H */
 

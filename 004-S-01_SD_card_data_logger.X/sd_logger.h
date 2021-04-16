@@ -32,10 +32,11 @@
 #define	SD_LOGGER_H
 
 #include <stdint.h>
+#include "device_logger_descriptors.h"
 
 int8_t sd_logger_init(void);
 
-void sd_logger_process(void);
+void sd_logger_store_logging_buffer(logging_buffer_t *buf);
 
 #endif	/* SD_LOGGER_H */
 

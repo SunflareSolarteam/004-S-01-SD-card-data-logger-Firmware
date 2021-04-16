@@ -4,29 +4,9 @@
     <logicalFolder name="HeaderFiles"
                    displayName="Header Files"
                    projectFiles="true">
-      <logicalFolder name="MCC Generated Files"
-                     displayName="MCC Generated Files"
-                     projectFiles="true">
-        <itemPath>mcc_generated_files/interrupt_manager.h</itemPath>
-        <itemPath>mcc_generated_files/watchdog.h</itemPath>
-        <itemPath>mcc_generated_files/pin_manager.h</itemPath>
-        <itemPath>mcc_generated_files/uart1.h</itemPath>
-        <itemPath>mcc_generated_files/reset.h</itemPath>
-        <itemPath>mcc_generated_files/tmr1.h</itemPath>
-        <itemPath>mcc_generated_files/traps.h</itemPath>
-        <itemPath>mcc_generated_files/clock.h</itemPath>
-        <itemPath>mcc_generated_files/reset_types.h</itemPath>
-        <itemPath>mcc_generated_files/system_types.h</itemPath>
-        <itemPath>mcc_generated_files/mcc.h</itemPath>
-        <itemPath>mcc_generated_files/system.h</itemPath>
-        <itemPath>mcc_generated_files/can1.h</itemPath>
-        <itemPath>mcc_generated_files/dma.h</itemPath>
-        <itemPath>mcc_generated_files/can_types.h</itemPath>
-        <itemPath>mcc_generated_files/ecan1.h</itemPath>
-        <itemPath>mcc_generated_files/spi1.h</itemPath>
-        <itemPath>mcc_generated_files/uart2.h</itemPath>
-      </logicalFolder>
       <logicalFolder name="f1" displayName="mla_fileio" projectFiles="true">
+        <itemPath>mla_fileio/drv_spi.h</itemPath>
+        <itemPath>mla_fileio/drv_spi_config.h</itemPath>
         <itemPath>mla_fileio/fileio.h</itemPath>
         <itemPath>mla_fileio/fileio_config.h</itemPath>
         <itemPath>mla_fileio/fileio_media.h</itemPath>
@@ -34,16 +14,20 @@
         <itemPath>mla_fileio/sd_spi.h</itemPath>
         <itemPath>mla_fileio/sd_spi_config.h</itemPath>
         <itemPath>mla_fileio/sd_spi_private.h</itemPath>
-        <itemPath>mla_fileio/drv_spi.h</itemPath>
-        <itemPath>mla_fileio/drv_spi_config.h</itemPath>
         <itemPath>mla_fileio/system_defs.h</itemPath>
       </logicalFolder>
-      <itemPath>softwaretimer.h</itemPath>
+      <itemPath>config.h</itemPath>
       <itemPath>debugprint.h</itemPath>
-      <itemPath>canbus.h</itemPath>
+      <itemPath>softwaretimer.h</itemPath>
+      <itemPath>utl.h</itemPath>
+      <itemPath>can.h</itemPath>
+      <itemPath>candrv.h</itemPath>
+      <itemPath>device_logger.h</itemPath>
+      <itemPath>device_logger_descriptors.h</itemPath>
+      <itemPath>device_logger_typedefs.h</itemPath>
+      <itemPath>flash.h</itemPath>
       <itemPath>sd_logger.h</itemPath>
       <itemPath>gps.h</itemPath>
-      <itemPath>utl.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -52,42 +36,27 @@
     <logicalFolder name="SourceFiles"
                    displayName="Source Files"
                    projectFiles="true">
-      <logicalFolder name="MCC Generated Files"
-                     displayName="MCC Generated Files"
-                     projectFiles="true">
-        <itemPath>mcc_generated_files/reset.c</itemPath>
-        <itemPath>mcc_generated_files/tmr1.c</itemPath>
-        <itemPath>mcc_generated_files/system.c</itemPath>
-        <itemPath>mcc_generated_files/traps.c</itemPath>
-        <itemPath>mcc_generated_files/clock.c</itemPath>
-        <itemPath>mcc_generated_files/interrupt_manager.c</itemPath>
-        <itemPath>mcc_generated_files/uart1.c</itemPath>
-        <itemPath>mcc_generated_files/mcc.c</itemPath>
-        <itemPath>mcc_generated_files/pin_manager.c</itemPath>
-        <itemPath>mcc_generated_files/can1.c</itemPath>
-        <itemPath>mcc_generated_files/dma.c</itemPath>
-        <itemPath>mcc_generated_files/ecan1.c</itemPath>
-        <itemPath>mcc_generated_files/spi1.c</itemPath>
-        <itemPath>mcc_generated_files/uart2.c</itemPath>
-      </logicalFolder>
       <logicalFolder name="f1" displayName="mla_fileio" projectFiles="true">
+        <itemPath>mla_fileio/drv_spi_16bit_v2.c</itemPath>
         <itemPath>mla_fileio/fileio.c</itemPath>
         <itemPath>mla_fileio/sd_spi.c</itemPath>
-        <itemPath>mla_fileio/drv_spi_16bit_v2.c</itemPath>
       </logicalFolder>
+      <itemPath>debugprint.c</itemPath>
       <itemPath>main.c</itemPath>
       <itemPath>softwaretimer.c</itemPath>
-      <itemPath>debugprint.c</itemPath>
-      <itemPath>canbus.c</itemPath>
+      <itemPath>utl.c</itemPath>
+      <itemPath>can.c</itemPath>
+      <itemPath>candrv.c</itemPath>
+      <itemPath>device_logger.c</itemPath>
+      <itemPath>device_logger_descriptors.c</itemPath>
+      <itemPath>flash.c</itemPath>
       <itemPath>sd_logger.c</itemPath>
       <itemPath>gps.c</itemPath>
-      <itemPath>utl.c</itemPath>
     </logicalFolder>
     <logicalFolder name="ExternalFiles"
                    displayName="Important Files"
                    projectFiles="false">
       <itemPath>Makefile</itemPath>
-      <itemPath>MCCconfig.mc3</itemPath>
     </logicalFolder>
   </logicalFolder>
   <sourceRootList>
@@ -101,7 +70,7 @@
         <targetDevice>dsPIC33EP128GS804</targetDevice>
         <targetHeader></targetHeader>
         <targetPluginBoard></targetPluginBoard>
-        <platformTool>pk4hybrid</platformTool>
+        <platformTool>PICkit3PlatformTool</platformTool>
         <languageToolchain>XC16</languageToolchain>
         <languageToolchainVersion>1.36</languageToolchainVersion>
         <platform>3</platform>
@@ -256,7 +225,77 @@
         <property key="save-temps" value="false"/>
       </C30Global>
       <PICkit3PlatformTool>
-        <property key="firmware.download.all" value="false"/>
+        <property key="ADFRZ" value="true"/>
+        <property key="AutoSelectMemRanges" value="auto"/>
+        <property key="CLC 1" value="true"/>
+        <property key="CLC 2" value="true"/>
+        <property key="CLC 3" value="true"/>
+        <property key="CLC 4" value="true"/>
+        <property key="Comparator 1" value="true"/>
+        <property key="Comparator 2" value="true"/>
+        <property key="Comparator 3" value="true"/>
+        <property key="Comparator 4" value="true"/>
+        <property key="Freeze All Other Peripherals" value="true"/>
+        <property key="I2C 1" value="true"/>
+        <property key="I2C 2" value="true"/>
+        <property key="INPUT CAPTURE 1" value="true"/>
+        <property key="INPUT CAPTURE 2" value="true"/>
+        <property key="INPUT CAPTURE 3" value="true"/>
+        <property key="INPUT CAPTURE 4" value="true"/>
+        <property key="OUTPUT COMPARE 1" value="true"/>
+        <property key="OUTPUT COMPARE 2" value="true"/>
+        <property key="OUTPUT COMPARE 3" value="true"/>
+        <property key="OUTPUT COMPARE 4" value="true"/>
+        <property key="PTG" value="true"/>
+        <property key="PWM" value="true"/>
+        <property key="SPI 1" value="true"/>
+        <property key="SPI 2" value="true"/>
+        <property key="SPI 3" value="true"/>
+        <property key="SecureSegment.SegmentProgramming" value="FullChipProgramming"/>
+        <property key="TIMER1" value="true"/>
+        <property key="TIMER2" value="true"/>
+        <property key="TIMER3" value="true"/>
+        <property key="TIMER4" value="true"/>
+        <property key="TIMER5" value="true"/>
+        <property key="ToolFirmwareFilePath"
+                  value="Press to browse for a specific firmware version"/>
+        <property key="ToolFirmwareOption.UseLatestFirmware" value="true"/>
+        <property key="UART 1" value="true"/>
+        <property key="UART 2" value="true"/>
+        <property key="debugoptions.useswbreakpoints" value="false"/>
+        <property key="hwtoolclock.frcindebug" value="false"/>
+        <property key="memories.aux" value="false"/>
+        <property key="memories.bootflash" value="true"/>
+        <property key="memories.configurationmemory" value="true"/>
+        <property key="memories.configurationmemory2" value="true"/>
+        <property key="memories.dataflash" value="true"/>
+        <property key="memories.eeprom" value="true"/>
+        <property key="memories.flashdata" value="true"/>
+        <property key="memories.id" value="true"/>
+        <property key="memories.instruction.ram" value="true"/>
+        <property key="memories.instruction.ram.ranges"
+                  value="${memories.instruction.ram.ranges}"/>
+        <property key="memories.programmemory" value="true"/>
+        <property key="memories.programmemory.ranges" value="0-ffffffffffffffff"/>
+        <property key="poweroptions.powerenable" value="false"/>
+        <property key="programmertogo.imagename" value=""/>
+        <property key="programoptions.donoteraseauxmem" value="false"/>
+        <property key="programoptions.eraseb4program" value="true"/>
+        <property key="programoptions.pgmspeed" value="2"/>
+        <property key="programoptions.preservedataflash" value="false"/>
+        <property key="programoptions.preservedataflash.ranges"
+                  value="${programoptions.preservedataflash.ranges}"/>
+        <property key="programoptions.preserveeeprom" value="false"/>
+        <property key="programoptions.preserveeeprom.ranges" value=""/>
+        <property key="programoptions.preserveprogram.ranges" value=""/>
+        <property key="programoptions.preserveprogramrange" value="false"/>
+        <property key="programoptions.preserveuserid" value="false"/>
+        <property key="programoptions.programcalmem" value="false"/>
+        <property key="programoptions.programuserotp" value="false"/>
+        <property key="programoptions.testmodeentrymethod" value="VDDFirst"/>
+        <property key="programoptions.usehighvoltageonmclr" value="false"/>
+        <property key="programoptions.uselvpprogramming" value="false"/>
+        <property key="voltagevalue" value="3.25"/>
       </PICkit3PlatformTool>
     </conf>
   </confs>
